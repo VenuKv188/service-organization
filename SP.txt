@@ -1,0 +1,146 @@
+CREATE PROCEDURE AddCustomer
+    @CustomerName VARCHAR(255),
+    @CustomerPhone VARCHAR(15),
+    @Email VARCHAR(50),
+    @Address VARCHAR(255),
+    @Location VARCHAR(255)
+AS
+BEGIN
+    
+    DECLARE @CustomerID INT;
+
+    BEGIN TRANSACTION;
+
+    
+    IF NOT EXISTS (SELECT 1 FROM Customer WHERE CustomerPhone = @CustomerPhone)
+    BEGIN
+        INSERT INTO Customer (CustomerName, CustomerPhone, Email, Address, Location) 
+        VALUES (@CustomerName, @CustomerPhone, @Email, @Address, @Location);
+
+        SET @CustomerID = SCOPE_IDENTITY();
+    END
+    ELSE
+    BEGIN
+        UPDATE Customer
+        SET CustomerName = @CustomerName,
+            Email = @Email,
+            Address = @Address,
+            Location = @Location
+        WHERE CustomerPhone = @CustomerPhone;
+
+        SET @CustomerID = (SELECT CustomerID FROM Customer WHERE CustomerPhone = @CustomerPhone);
+    END;
+
+    COMMIT;
+END;
+
+**************************************************************************************************************
+
+
+
+create PROCEDURE AddTicketForCustomer
+    @CustomerPhone VARCHAR(15),
+    @ProductName VARCHAR(255),
+    @ProductDescription VARCHAR(MAX)
+AS
+BEGIN  
+    DECLARE @CustomerID INT;
+    DECLARE @TicketID INT;
+
+    BEGIN TRANSACTION;
+
+    -- Check if the customer exists
+    IF EXISTS (SELECT 1 FROM Customer WHERE CustomerPhone = @CustomerPhone)
+    BEGIN
+        -- If the customer exists, retrieve the CustomerID
+        SET @CustomerID = (SELECT CustomerID FROM Customer WHERE CustomerPhone = @CustomerPhone);
+    END
+    ELSE
+    BEGIN 
+        -- If the customer doesn't exist, throw an error to prompt the user for details
+        THROW 50000, 'Customer does not exist. Please provide customer details first.', 1;
+        RETURN;  -- Stop further execution if there's an error
+    END;
+    
+    -- Insert the ticket
+    INSERT INTO Ticket (CustomerID, CustomerPhone, ProductName, ProductDescription)
+    VALUES (@CustomerID, @CustomerPhone, @ProductName, @ProductDescription);
+
+    SET @TicketID = SCOPE_IDENTITY();
+    
+    COMMIT;
+END;
+
+**********************************************************************************************************
+
+CREATE PROCEDURE AddAssignment
+    @TicketID INT,
+    @CustomerID INT,
+    @AgentID INT,
+    @Status VARCHAR(50) = 'Assigned'
+AS
+BEGIN
+    -- Start a transaction
+    BEGIN TRANSACTION;
+
+    -- Insert into Assignment table
+    INSERT INTO Assignment (TicketID, CustomerID, AgentID, Status)
+    VALUES (@TicketID, @CustomerID, @AgentID, @Status);
+
+    -- Update Ticket status to Assigned
+    UPDATE Ticket
+    SET Status = 'Assigned'
+    WHERE TicketID = @TicketID;
+
+    -- Commit the transaction
+    COMMIT;
+
+    PRINT 'Assignment successfully recorded.';
+END;
+
+*************************************************************************************************************
+
+create PROCEDURE ProvideFeedback
+    @CustomerPhone VARCHAR(15),
+    @Rating INT
+AS
+BEGIN
+    -- Declare variables
+    DECLARE @CustomerID INT;
+    DECLARE @AgentID INT;
+    DECLARE @AssignmentID INT;
+
+    -- Start a transaction
+    BEGIN TRANSACTION;
+
+    -- Get AssignmentID based on CustomerPhone
+    SELECT @AssignmentID = AssignmentID
+    FROM Assignment
+    WHERE CustomerID IN (SELECT CustomerID FROM Customer WHERE CustomerPhone = @CustomerPhone);
+
+    -- Check if the assignment exists
+    IF @AssignmentID IS NOT NULL
+    BEGIN
+        -- Get CustomerID and AgentID based on AssignmentID
+        SELECT @CustomerID = CustomerID, @AgentID = AgentID
+        FROM Assignment
+        WHERE AssignmentID = @AssignmentID;
+
+        -- Insert into Feedback table
+        INSERT INTO Feedback (CustomerID, AgentID, AssignmentID, Rating)
+        VALUES (@CustomerID, @AgentID, @AssignmentID, @Rating);
+
+        -- Commit the transaction
+        COMMIT;
+
+        PRINT 'Feedback successfully recorded.';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Invalid CustomerPhone or Assignment does not exist.';
+    END
+END;
+
+
+
+
